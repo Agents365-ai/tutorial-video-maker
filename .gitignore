@@ -1,0 +1,26 @@
+# Claude Code local settings
+CLAUDE.md
+.claude/
+
+# Node
+node_modules/
+dist/
+out/
+
+# Python
+__pycache__/
+*.pyc
+.env
+
+# Video output
+*.mp4
+*.wav
+*.srt
+
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+part_*.wav
+concat_list.txt
