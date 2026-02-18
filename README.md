@@ -87,6 +87,15 @@ tutorials/{name}/
 └── final_video.mp4     # Output
 ```
 
+## Support
+
+If you find this project helpful, consider buying me a coffee!
+
+<p align="center">
+  <img src="images/wechat-pay.png" width="200" alt="WeChat Pay" />
+  <img src="images/alipay.png" width="200" alt="Alipay" />
+</p>
+
 ## License
 
 MIT License

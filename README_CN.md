@@ -87,6 +87,15 @@ tutorials/{name}/
 └── final_video.mp4     # 输出视频
 ```
 
+## 支持
+
+如果这个项目对你有帮助，欢迎请我喝杯咖啡！
+
+<p align="center">
+  <img src="images/wechat-pay.png" width="200" alt="微信支付" />
+  <img src="images/alipay.png" width="200" alt="支付宝" />
+</p>
+
 ## 许可证
 
 MIT 许可证
