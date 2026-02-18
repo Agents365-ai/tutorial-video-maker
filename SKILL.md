@@ -17,15 +17,38 @@ Create polished tutorial videos from screen recordings with AI-generated narrati
 
 | Step | Tool | Output |
 |------|------|--------|
-| 0 | Claude | Project directory |
-| 1 | User | `assets/` with recordings |
-| 2 | Claude | `outline.md` |
-| 3 | FFmpeg | Duration analysis |
-| 4 | Claude | `script.txt` |
-| 5 | generate_tts.py | `audio.wav`, `audio.srt` |
-| 6 | Claude | `timing.json` |
-| 7 | Remotion | Video composition |
-| 8 | FFmpeg | `final_video.mp4` |
+| **0. Initialize** | Claude | Project directory |
+| **1. Add Recordings** | User | `assets/` with recordings |
+| **2. Create Outline** | Claude | `outline.md` |
+| **3. Duration Analysis** | FFmpeg | Duration metadata |
+| **4. Generate Script** | Claude | `script.txt` |
+| **5. Generate Audio** | generate_tts.py | `audio.wav`, `audio.srt`, `timing.json` |
+| **6. Create Timing** | Claude | `timing.json` (annotations) |
+| **7. Remotion Composition** | Remotion | Video composition |
+| **8. Render Video** | remotion render | `output.mp4` |
+| **9. Add BGM** | FFmpeg | `video_with_bgm.mp4` |
+| **10. Add Subtitles** | FFmpeg | `final_video.mp4` |
+| **11. Publish Info** | Claude | `publish_info.md` |
+| **12. Thumbnail** | Remotion/AI | `thumbnail_*.png` |
+| **13. Verify Output** | Claude | Verification report |
+| **14. Cleanup** | Claude | Remove temp files |
+
+### Validation Checkpoints
+
+**After Step 5 (TTS)**:
+- [ ] `output/audio.wav` exists and plays correctly
+- [ ] `timing.json` has all sections with correct timestamps
+- [ ] `output/audio.srt` encoding is UTF-8
+
+**After Step 8 (Render)**:
+- [ ] `output/output.mp4` resolution is 1920x1080
+- [ ] Audio-video sync verified
+- [ ] No black frames
+
+**After Step 10 (Final)**:
+- [ ] `output/final_video.mp4` resolution is 1920x1080
+- [ ] Subtitles display correctly (if added)
+- [ ] File size is reasonable
 
 ## Step Details
 
@@ -87,11 +110,95 @@ Remotion combines all elements:
 - Annotation overlays
 - Transitions between segments
 
-### Step 8: Final Export
-FFmpeg renders final video:
-- Resolution: 1920x1080 (default)
-- Format: MP4 with H.264
-- Audio: AAC 192kbps
+### Step 8: Render Video
+Remotion renders the composed video:
+```bash
+npx remotion render src/remotion/index.ts CompositionId output/output.mp4 --video-bitrate 8M
+```
+
+Verify resolution:
+```bash
+ffprobe -v quiet -show_entries stream=width,height -of csv=p=0 output/output.mp4
+# Expected: 1920,1080
+```
+
+### Step 9: Add BGM
+Mix background music with narration:
+```bash
+ffmpeg -y \
+  -i output/output.mp4 \
+  -stream_loop -1 -i bgm.mp3 \
+  -filter_complex "[0:a]volume=1.0[a1];[1:a]volume=0.05[a2];[a1][a2]amix=inputs=2:duration=first[aout]" \
+  -map 0:v -map "[aout]" \
+  -c:v copy -c:a aac -b:a 192k \
+  output/video_with_bgm.mp4
+```
+
+### Step 10: Add Subtitles
+Optional - ask user if subtitles are needed.
+
+**Without subtitles**:
+```bash
+cp output/video_with_bgm.mp4 output/final_video.mp4
+```
+
+**With subtitles**:
+```bash
+ffmpeg -y -i output/video_with_bgm.mp4 \
+  -vf "subtitles=output/audio.srt:force_style='FontName=PingFang SC,FontSize=12,PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Bold=1,Outline=2,Shadow=0,MarginV=20'" \
+  -c:v libx264 -crf 18 -preset slow -s 1920x1080 \
+  -c:a copy output/final_video.mp4
+```
+
+### Step 11: Generate Publish Info
+Create `publish_info.md` with:
+- Title (topic + key feature)
+- Description (100-200 words)
+- Tags (10 relevant keywords)
+- Chapters with timestamps from `timing.json`
+
+### Step 12: Create Thumbnail
+Generate thumbnail using Remotion:
+```bash
+npx remotion still src/remotion/index.ts Thumbnail output/thumbnail_16x9.png
+```
+
+Or use AI image generation if available.
+
+### Step 13: Verify Output
+Run verification checks:
+
+```bash
+echo "=== File Check ==="
+for f in script.txt output/audio.wav output/audio.srt timing.json output/output.mp4 output/final_video.mp4; do
+  [ -f "$f" ] && echo "✓ $f" || echo "✗ $f missing"
+done
+
+echo "=== Technical Check ==="
+RES=$(ffprobe -v quiet -select_streams v:0 -show_entries stream=width,height -of csv=p=0 output/final_video.mp4)
+[ "$RES" = "1920,1080" ] && echo "✓ Resolution: 1920x1080" || echo "✗ Resolution: $RES"
+
+DUR=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 output/final_video.mp4 | cut -d. -f1)
+echo "✓ Duration: ${DUR}s"
+
+SIZE=$(ls -lh output/final_video.mp4 | awk '{print $5}')
+echo "✓ File size: $SIZE"
+```
+
+### Step 14: Cleanup
+**Requires user confirmation.**
+
+List temp files:
+```bash
+echo "=== Temp files to delete ==="
+ls -lh output/output.mp4 output/video_with_bgm.mp4 2>/dev/null
+```
+
+After confirmation:
+```bash
+rm -f output/output.mp4 output/video_with_bgm.mp4
+echo "✓ Temp files cleaned"
+```
 
 ## Annotation Syntax
 
@@ -122,12 +229,49 @@ project_name/
 └── timing.json
 ```
 
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Output in `out/` instead of `output/` | Specify full path: `npx remotion render ... output/output.mp4` |
+| Running `npx remotion studio` | **NEVER** - use `npx remotion render` |
+| Audio/video timing mismatch | Use `timing.json`, don't hardcode frame counts |
+| Missing assets folder | Create `assets/` before adding recordings |
+| Wrong asset format | Use MP4, MOV, MKV, or WebM |
+| TTS timing drift | Keep MAX_CHARS=400 in generate_tts.py |
+| Subtitle font missing | Use PingFang SC (macOS), Microsoft YaHei (Windows) |
+| Subtitles invisible | Match text color to video background |
+| Video blurry | Use `--video-bitrate 8M` for 1080p |
+| Annotation syntax errors | Check `[HIGHLIGHT]`, `[ARROW]`, `[CALLOUT]` markers |
+| BGM too loud | Keep BGM volume at 0.05, narration at 1.0 |
+
 ## Requirements
 
-- FFmpeg (video processing)
-- Node.js 18+ (Remotion)
-- Python 3.10+ (TTS generation)
-- OpenAI API key (for TTS, optional)
+### System Tools
+
+```bash
+brew install ffmpeg node  # macOS
+```
+
+### Python Dependencies
+
+```bash
+pip install azure-cognitiveservices-speech requests
+```
+
+### Node.js Dependencies
+
+```bash
+npm install remotion @remotion/cli @remotion/player
+```
+
+### Environment Variables
+
+```bash
+# Azure TTS (required for generate_tts.py)
+export AZURE_SPEECH_KEY="your-azure-speech-key"
+export AZURE_SPEECH_REGION="eastasia"
+```
 
 ## Related Skills
 
